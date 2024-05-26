@@ -17,10 +17,16 @@ const ColorPickerWithRotation = ({ currentColor, onChangeColor, currentRotation,
   };
 
   const applyRotation = (direction) => {
-    const newRotation = direction === "left" ? -tempRotation : tempRotation;
-    setRotation(rotation + newRotation);
-    onChangeRotation(rotation + newRotation);
-  };
+  const parsedTempRotation = parseFloat(tempRotation);
+  if (!isNaN(parsedTempRotation)) {
+    const newRotation = direction === "left" ? rotation - parsedTempRotation : rotation + parsedTempRotation;
+    setRotation(newRotation);
+    onChangeRotation(newRotation);
+  } else {
+    console.error("Invalid rotation value");
+  }
+};
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

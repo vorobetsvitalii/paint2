@@ -439,7 +439,7 @@ function Home() {
 
     const handleChangeRotation = (newRotation) => {
         if (selectedFigure) {
-            selectedFigure.rotation = newRotation;
+            selectedFigure.rotation = parseFloat(newRotation);
             setLines((prevLines) => [...prevLines]);
 
             // Відправляємо запит на сервер для оновлення фігури в базі даних
