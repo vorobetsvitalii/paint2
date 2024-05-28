@@ -6,12 +6,11 @@ import Login from './Login';
 import Register from './Register';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('user_id'));
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('user'));
 
   useEffect(() => {
-    const user_id = localStorage.getItem('user_id');
-    console.log("user ", user_id)
-    if (!isLoggedIn && !user_id) {
+    const user = localStorage.getItem('user');
+    if (!isLoggedIn && !user) {
       setIsLoggedIn(false);
     } else {
       setIsLoggedIn(true);

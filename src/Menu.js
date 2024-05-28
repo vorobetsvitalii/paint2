@@ -4,7 +4,7 @@ import "./App.css";
 const Menu = ({ setLineColor, setShape }) => {
   return (
     <div className="Menu">
-      <label>Brush Color </label>
+      <label>Color</label>
       <input
         type="color"
         onChange={(e) => {

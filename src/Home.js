@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import Menu from "./Menu";
-import ColorPickerWithRotation from "./ColorPickerWithRotation";
+import Head from "./Head";
 import "./App.css";
+import LogoutButton from "./Logout";
 
 function Home() {
     const canvasRef = useRef(null);
@@ -16,14 +16,15 @@ function Home() {
     const [selectedFigure, setSelectedFigure] = useState(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [colorPickerPosition, setColorPickerPosition] = useState({ x: 0, y: 0 });
-    const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('user_id'));
+    const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('user'));
     const [linesSize, setLinesSize] = useState(lines.length)
 
 
     useEffect(() => {
-        
+
         async function fetchData() {
-            let id = localStorage.getItem("user_id");
+            let user = JSON.parse(localStorage.getItem("user"))
+            let id=  user.user_id
             try {
                 const response = await fetch(`http://localhost:8080/api/shapes/painter/${id}/shapes`);
                 if (!response.ok) {
@@ -203,8 +204,9 @@ function Home() {
         if (lines.length > linesSize) {
             console.log(lines.length, linesSize)
             console.log("endDrawing")
-            
-            let id = localStorage.getItem("user_id")
+
+            let user = localStorage.getItem("user")
+            let id =  JSON.parse(user).user_id
             let resp = await fetch(`http://localhost:8080/api/shapes/painter/${id}/shapes`, {
                 method: "POST",
                 body: JSON.stringify({
@@ -215,7 +217,11 @@ function Home() {
                 }
             });
             if (resp.status === 200) {
-                console.log('added');
+                let responseBody = await resp.json(); // Parse the JSON response
+                let shapeId = responseBody.id; // Extract the id from the response body
+
+                // Assign the id to the last line
+                lines[lines.length - 1].id = shapeId;
                 setLinesSize(lines.length)
             }
         }
@@ -463,7 +469,32 @@ function Home() {
                 });
         }
     };
-    
+
+    const handleDeleteFigure = () => {
+        if (selectedFigure) {
+            // Відправляємо запит на сервер для видалення фігури з бази даних
+            fetch(`http://localhost:8080/api/shapes/shapes/${selectedFigure.id}`, {
+                method: 'DELETE',
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to delete shape');
+                    }
+                    // Видаляємо вибрану фігуру зі списку фігур
+                    setLines(prevLines => prevLines.filter(figure => figure.id !== selectedFigure.id));
+                    redrawLines();
+                })
+                .catch(error => {
+                    console.error('Error deleting shape:', error);
+                });
+        }
+    };
+
+
+    const changeSize = () => {
+
+    }
+
     useEffect(() => {
         const canvas = canvasRef.current;
         canvas.addEventListener("contextmenu", handleRightClick);
@@ -472,11 +503,135 @@ function Home() {
         };
     }, [handleRightClick]);
 
+    const handleResizeFigure = (percentChange) => {
+        if (selectedFigure && percentChange) {
+            if (selectedFigure.type === 'line') {
+                // Зміна розміру лінії
+                console.log(percentChange)
+                const deltaX = (selectedFigure.points[1].x - selectedFigure.points[0].x) * (percentChange / 100);
+                const deltaY = (selectedFigure.points[1].y - selectedFigure.points[0].y) * (percentChange / 100);
+                selectedFigure.points[0].x = selectedFigure.points[0].x - deltaX / 2;
+                selectedFigure.points[1].x = selectedFigure.points[1].x + deltaX / 2;
+                selectedFigure.points[0].y = selectedFigure.points[0].y - deltaY / 2;
+                selectedFigure.points[1].y = selectedFigure.points[1].y + deltaY / 2;
+            } else if (selectedFigure.type === 'rectangle') {
+                // Зміна розміру прямокутника
+                const widthChange = (selectedFigure.points[1].x - selectedFigure.points[0].x) * (percentChange / 100);
+                const heightChange = (selectedFigure.points[1].y - selectedFigure.points[0].y) * (percentChange / 100);
+                selectedFigure.points[0].x = selectedFigure.points[0].x - widthChange / 2;
+                selectedFigure.points[1].x = selectedFigure.points[1].x + widthChange / 2;
+                selectedFigure.points[0].y = selectedFigure.points[0].y - heightChange;
+                selectedFigure.points[1].y = selectedFigure.points[1].y + heightChange;
+            } else if (selectedFigure.type === 'circle') {
+                // Зміна радіуса кола
+                const radiusChange = selectedFigure.radius * (percentChange / 100);
+                selectedFigure.radius = (parseFloat(selectedFigure.radius) + radiusChange).toFixed(3)
+            } else {
+                // Якщо тип фігури не підтримується, не робимо нічого
+                console.warn('Unsupported figure type for resizing:', selectedFigure.type);
+                return;
+            }
+            setLines((prevLines) => [...prevLines]);
+            // Відправляємо запит на сервер для оновлення фігури в базі даних
+            fetch(`http://localhost:8080/api/shapes/shapes/${selectedFigure.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(selectedFigure),
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to update shape size');
+                    }
+                    // Якщо запит вдало виконаний, оновлюємо лінії на екрані та в localStorage
+
+                    redrawLines();
+                })
+                .catch(error => {
+                    console.error('Error updating shape size:', error);
+                });
+        }
+    }
+
+    const moveFigure = (distanceX, distanceY) => {
+        if (selectedFigure) {
+            distanceX = typeof distanceX !== 'undefined' ? distanceX : 0;
+            distanceY = typeof distanceY !== NaN ? distanceY : 0;
+            console.log(distanceX, distanceY)
+            let updatedFigure = { ...selectedFigure }; // Копіюємо обрану фігуру для збереження необхідних властивостей
+            if (selectedFigure.type === 'line') {
+                // Переміщення лінії
+                updatedFigure.points[0].x += distanceX;
+                updatedFigure.points[0].y += distanceY;
+                updatedFigure.points[1].x += distanceX;
+                updatedFigure.points[1].y += distanceY;
+            }
+            else if (selectedFigure.type === 'pencil') {
+                // Переміщення олівця
+                updatedFigure.points.forEach(point => {
+                    point.x += distanceX;
+                    point.y += distanceY;
+                });
+            } else if (selectedFigure.type === 'rectangle') {
+                // Переміщення прямокутника
+                updatedFigure.points[0].x += distanceX;
+                updatedFigure.points[0].y += distanceY;
+                updatedFigure.points[1].x += distanceX;
+                updatedFigure.points[1].y += distanceY;
+            } else if (selectedFigure.type === 'circle') {
+                // Переміщення кола
+                console.log(updatedFigure)
+                updatedFigure.points[0].x += distanceX;
+                updatedFigure.points[0].y += distanceY;
+            } else {
+                // Якщо тип фігури не підтримується, не робимо нічого
+                console.warn('Unsupported figure type for moving:', selectedFigure.type);
+                return;
+            }
+
+            // Оновлюємо обрану фігуру
+            setSelectedFigure(updatedFigure);
+
+            // Відправляємо запит на сервер для оновлення фігури в базі даних
+            fetch(`http://localhost:8080/api/shapes/shapes/${selectedFigure.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updatedFigure),
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to move shape');
+                    }
+                    // Якщо запит вдало виконаний, оновлюємо лінії на екрані та в localStorage
+                    redrawLines();
+                    localStorage.setItem("lines", JSON.stringify(lines));
+                })
+                .catch(error => {
+                    console.error('Error moving shape:', error);
+                });
+        }
+    };
+
     return (
         <div className="App">
             <h1>Paint App</h1>
+            <LogoutButton/>
+            <Head
+                move={moveFigure}
+                deleteElement={handleDeleteFigure}
+                changeSize={changeSize}
+                handleSizeChange={handleResizeFigure}
+                showColorPicker={showColorPicker}
+                setLineColor={setLineColor}
+                setShape={setShape}
+                selectedFigure={selectedFigure}
+                handleChangeColor={handleChangeColor}
+                handleChangeRotation={handleChangeRotation}
+            />
             <div className="draw-area">
-                <Menu setLineColor={setLineColor} setShape={setShape} />
                 <canvas
                     onMouseDown={(e) => {
                         if (shape === "pencil") startDrawingPencil(e);
@@ -490,24 +645,7 @@ function Home() {
                     width={`1280px`}
                     height={`720px`}
                 />
-                {showColorPicker && (
-                    <div
-                        ref={colorPickerRef}
-                        style={{
-                            position: "absolute",
-                            left: `${colorPickerPosition.x}px`,
-                            top: `${colorPickerPosition.y}px`,
-                            transform: "translate(-50%, -50%)",
-                        }}
-                    >
-                        <ColorPickerWithRotation
-                            currentColor={selectedFigure.color}
-                            currentRotation={selectedFigure.rotation}
-                            onChangeColor={handleChangeColor}
-                            onChangeRotation={handleChangeRotation}
-                        />
-                    </div>
-                )}
+
             </div>
         </div>
     );
